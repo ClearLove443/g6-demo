@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Interactively Add</title>
+</head>
+
+<body>
+  <select id="selector">
+    <option value="default">Default mode</option>
+    <option value="addNode">Add Node (by clicking canvas)</option>
+    <option value="addEdge">Add Edge (by clicking two end nodes)</option>
+    <option value="removeItem">Remove Item</option>
+  </select>
+  <div>
+    <label>label: </label>
+    <input id="label">
+  </div>
+  <div>
+    <button onclick="exportJson()">Export JSON Data</button>
+  </div>
+
+  <div id="mountNode"></div>
+  <script src="https://gw.alipayobjects.com/os/antv/pkg/_antv.g6-3.3.5/dist/g6.min.js"></script>
+  <script type="text/javascript">
+    const data = {
+      nodes: [{
+        id: 'node1',
+        x: 100,
+        y: 200,
+        label: 'node1'
+      }, {
+        id: 'node2',
+        x: 300,
+        y: 200,
+        label: 'node2'
+      }, {
+        id: 'node3',
+        x: 300,
+        y: 300,
+        label: 'node3'
+      }],
+      edges: [{
+        id: 'edge1',
+        target: 'node2',
+        source: 'node1'
+      }]
+    };
+
+    let addedCount = 0;
+    G6.registerBehavior('click-add-edge', {
+      getEvents() {
+        return {
+          'node:click': 'onClick',
+          mousemove: 'onMousemove',
+          'edge:click': 'onEdgeClick' // 点击空白处，取消边
+        };
+      },
+      onClick(ev) {
+        const node = ev.item;
+        const graph = this.graph;
+        const point = {
+          x: ev.x,
+          y: ev.y
+        };
+        const model = node.getModel();
+        if (this.addingEdge && this.edge) {
+          graph.updateItem(this.edge, {
+            target: model.id
+          });
+          // graph.setItemState(this.edge, 'selected', true);
+          this.edge = null;
+          this.addingEdge = false;
+        } else {
+          this.edge = graph.addItem('edge', {
+            source: model.id,
+            target: point,
+            label: document.getElementById('label').value,
+            style: {
+              endArrow: true
+            }
+          });
+          this.addingEdge = true;
+        }
+      },
+      onMousemove(ev) {
+        const point = {
+          x: ev.x,
+          y: ev.y
+        };
+        if (this.addingEdge && this.edge) {
+          this.graph.updateItem(this.edge, {
+            target: point
+          });
+        }
+      },
+      onEdgeClick(ev) {
+        const currentEdge = ev.item;
+        // 拖拽过程中，点击会点击到新增的边上
+        if (this.addingEdge && this.edge == currentEdge) {
+          graph.removeItem(this.edge);
+          this.edge = null;
+          this.addingEdge = false;
+        }
+      }
+    });
+
+    // Register a custom behavior to add node
+    G6.registerBehavior('click-add-node', {
+      getEvents() {
+        return {
+          'canvas:click': 'onClick'
+        };
+      },
+      onClick(ev) {
+        const graph = this.graph;
+        const node = this.graph.addItem('node', {
+          x: ev.canvasX,
+          y: ev.canvasY,
+          id: `node-${addedCount}`, // 生成唯一的 id
+          label: document.getElementById('label').value
+        });
+        addedCount++;
+      }
+    });
+
+    const graph = new G6.Graph({
+      container: 'mountNode',
+      width: 5000,
+      height: 5000,
+      modes: {
+        default: ['drag-node', 'click-select'],
+        addNode: ['click-add-node', 'click-select'],
+        addEdge: ['click-add-edge', 'click-select']
+      },
+      defaultNode: {
+        size: 50,
+        style: {
+          fill: '#C6E5FF',
+          stroke: '#5B8FF9',
+        },
+      },
+      defaultEdge: {
+        size: 1,
+        color: '#000',
+      },
+      // The node styles in different states
+      nodeStateStyles: {
+        // The node styles in selected state, corresponds to the built-in click-select behavior
+        selected: {
+          stroke: '#666',
+          lineWidth: 2,
+          fill: 'steelblue'
+        }
+      }
+    });
+
+    graph.data(data);
+    graph.render();
+
+    // // 鼠标点击节点，隐藏该节点
+    // graph.on('node:click', (ev) => {
+    //   const node = ev.item;
+    //   console.log('before hide(), the nodevisible = ', node.get('visible'));
+    //   node.hide();
+    //   console.log('after hide(), the node visible = ', node.get('visible'));
+    // });
+
+    // 鼠标点击节点，删除该节点  同时会删除相关的边
+
+    graph.on('node:click', (ev) => {
+      const node = ev.item;
+
+      // 删除节点
+      if (document.getElementById('selector').value === 'removeItem')
+        graph.removeItem(node)
+    });
+
+    // // 鼠标点击边，隐藏该边
+    // graph.on('edge:click', (ev) => {
+    //   const edge = ev.item;
+    //   console.log('before hide(), the edge visible = ', edge.get('visible'));
+    //   edge.hide();
+    //   console.log('after hide(), the edge visible = ', edge.get('visible'));
+    // });
+
+    // 鼠标点击边，删除边
+    graph.on('edge:click', (ev) => {
+      const edge = ev.item;
+
+      // 删除边
+      if (document.getElementById('selector').value === 'removeItem')
+        graph.removeItem(edge)
+    });
+
+    // 鼠标点击画布，显示所有节点和边
+    graph.on('canvas:click', (ev) => {
+      const nodes = graph.getNodes();
+      const edges = graph.getEdges();
+      nodes.forEach((node) => {
+        node.show();
+      });
+      edges.forEach((edge) => {
+        edge.show();
+      });
+    });
+
+    document.getElementById('selector').addEventListener('change', e => {
+      const value = e.target.value;
+      graph.setMode(value);
+    });
+
+    const exportJson = () => {
+
+      var aTag = document.createElement('a');
+      aTag.download = 'test.json';
+      const data = [...graph.getNodes(), ...graph.getEdges()].map(e => e._cfg.model)
+      // const data2 = graph.save()
+      const fileContent = JSON.stringify(data, null, 2)
+      var blob = new Blob([fileContent]);
+      aTag.href = URL.createObjectURL(blob);
+      aTag.click();
+      URL.revokeObjectURL(blob);
+    }
+  </script>
+</body>
+
+</html>
